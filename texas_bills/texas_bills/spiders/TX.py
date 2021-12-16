@@ -1,57 +1,29 @@
 import scrapy
-from selenium import webdriver
-from selenium.webdriver.support.ui import Select
-from scrapy.selector import  Selector
-import time
-import csv
-from selenium.webdriver.chrome.options import Options
-chrome_options = Options()
-chrome_options.add_argument("--headless")
-
-path = R"E:\Desktop\texas\chromedriver.exe"
-a_list = []
-
-
+from scrapy.http import Request
 class TxSpider(scrapy.Spider):
     name = 'TX'
-    # allowed_domains = ['https://capitol.texas.gov/Reports/Report.aspx?LegSess=87R']
-    # start_urls = ['http://https://capitol.texas.gov/Reports/Report.aspx?LegSess=87R/']
-    def start_requests(self):
-        urls = 'http://google.com'
-        yield scrapy.Request(url=urls, callback=(self).parse)
-
-
+    # allowed_domains = ['capitol.texas.gov']
+    start_urls = ['https://capitol.texas.gov/Reports/Report.aspx?LegSess=87R&ID=filedwogovsign']
     def parse(self, response):
-        try:
-            driver = webdriver.Chrome(path,options=chrome_options)
-            driver.get("https://capitol.texas.gov/Reports/Report.aspx?LegSess=87R&ID=filedwogovsign")
-            sel = Selector(text=driver.page_source)
-            bill = sel.xpath("//tbody//td/a/text()").getall()
-            # print(bill)
-            time.sleep(2)
-            links = sel.xpath("//tbody//td/a/@href").getall()
-            with open(R"E:\Desktop\texas\out_3.csv", "w", newline="", encoding='utf8', ) as myfile:
-                csv_writer = csv.writer(myfile, delimiter=",")
-                for ur in links:
-                    driver.get(ur)
+        url = response.xpath('//table//tr/td/a/@href').extract()
+        for i in url:
+            yield Request(url=i,callback=self.parse_more)
 
-                    button = driver.find_element_by_xpath('//div["pagetabs"]/a[@class="enabledButNotActive"][1]')
-                    button.click()
-                    time.sleep(1)
-                    sel_1 = Selector(text=driver.page_source)
-                    pdf = sel_1.xpath('//div[@id="content"][2]/form[@name="Form1"]/table[@width="95%"]//tr[last()]/td[2]/a[1]/@href').get()                    # csv_writer.writerow(pdf)
-                    a_list.append("https://capitol.texas.gov"+pdf)
-                for ln,mo in  zip(bill,a_list):
-                    csv_writer.writerow([ln,mo])
+    def parse_more(self,response):
+        next_url = response.xpath('//div[@id="pagetabs"]/a[2]/@href').extract_first()
+        ab_url = "https://capitol.texas.gov/BillLookup/" + next_url
+        yield Request(url=ab_url,callback=self.parse_next)
 
-                myfile.close()
-                # print(a_list)
-                # print(len(a_list))
+    def parse_next(self,response):
+        bill_no = response.xpath('//div[@id="content"]//td//td[2]/span/text()').extract_first()
+        status = response.xpath('//table[@border="0"][@cellpadding="5"][1]//tr[last()]/td/text()[1]').extract_first()
+        url = response.xpath('//table[@border="0"][@cellpadding="5"][1]//tr[last()]/td[2]/a[1]/@href').extract_first()
+        url = "https://capitol.texas.gov/" + url
+        yield {
+            'bill no. ': bill_no,
+            'status' : status,
+            'url': url
+        }
 
 
 
-
-            # print(links)
-            # print("$$$$$$$$",len(links))
-        except Exception as e:
-            print("@@@@@@@@@@@@@",e)
